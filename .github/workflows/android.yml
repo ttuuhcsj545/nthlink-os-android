@@ -1,26 +1,59 @@
-name: Android CI
+# 工作流名称
+name: Android CI Build
 
+# 触发工作流的事件：
+# 1. 每次推送到 main 分支时
+# 2. 允许手动在 GitHub Actions 页面触发
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "develop" ]
   pull_request:
     branches: [ "main" ]
+  workflow_dispatch:
 
+# 定义一个名为 "build" 的任务 (Job)
 jobs:
   build:
-
+    # 任务将在最新的 Ubuntu 虚拟机上运行
     runs-on: ubuntu-latest
 
+    # 任务包含的步骤
     steps:
-    - uses: actions/checkout@v4
-    - name: set up JDK 11
+    
+    # 步骤 1: 检出代码
+    # 使用 actions/checkout@v4 确保工作流可以访问仓库代码
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+      
+    # 步骤 2: 设置 Java 环境
+    # Android 开发通常需要 JDK 17 或更新版本
+    - name: Set up JDK 17
       uses: actions/setup-java@v4
       with:
-        java-version: '11'
+        java-version: '17'
         distribution: 'temurin'
-        cache: gradle
-
+        cache: 'gradle' # 缓存 Gradle 依赖，加快后续构建速度
+        
+    # 步骤 3: 赋予 Gradle 包装器执行权限
+    # 在 Linux 环境中运行 ./gradlew 前必须执行
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
-    - name: Build with Gradle
-      run: ./gradlew build
+      
+    # 步骤 4: 构建 Debug APK 和 AAB
+    # 根据您的项目模块名调整 :app
+    - name: Build Debug APK and AAB
+      run: |
+        ./gradlew assembleDebug
+        ./gradlew bundleDebug
+        
+    # 步骤 5: 上传构建产物 (Artifact)
+    # 将生成的 APK/AAB 文件作为产物上传到 GitHub Actions，方便下载
+    - name: Upload Debug Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: debug-build-outputs
+        path: |
+          app/build/outputs/apk/debug/app-debug.apk
+          app/build/outputs/bundle/debug/app-debug.aab
+        # 保留 5 天
+        retention-days: 5
