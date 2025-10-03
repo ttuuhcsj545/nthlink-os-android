@@ -1,42 +1,35 @@
 # 工作流名称
-name: Android Release CI with Manual Gradle Fix
+name: Android CI Build (Fixed for Gradle Wrapper)
 
-# 触发条件
+# 触发条件：
 on:
   push:
     branches: [ "main" ]
-  workflow_dispatch:
+  workflow_dispatch: # 允许手动触发
 
-# 定义一个名为 "build_release" 的任务
 jobs:
   build_release:
     runs-on: ubuntu-latest
     
     steps:
       
-    # 步骤 1: 检出代码 (必须包含子模块)
+    # 步骤 1: 检出代码 (必须递归检出子模块)
     - name: Checkout Repository and Submodules
       uses: actions/checkout@v4
       with:
-        submodules: true # 启用子模块支持
+        submodules: true # 关键：确保拉取子模块
         fetch-depth: 0 
         
     # 步骤 2: 手动修复 Gradle Wrapper JAR 缺失问题
-    # 如果原作者项目没有包含 gradle/wrapper/gradle-wrapper.jar，这个步骤会手动下载它。
+    # 在不修改原项目的前提下，下载运行所需的 gradle-wrapper.jar
     - name: Manually fetch missing gradle-wrapper.jar
       run: |
-        # 目标路径
         JAR_PATH="gradle/wrapper/gradle-wrapper.jar"
         
-        # 检查文件是否已存在（如果存在则跳过）
         if [ ! -f "$JAR_PATH" ]; then
           echo "gradle-wrapper.jar not found. Downloading standard v8.8..."
-          
-          # 创建目录（如果不存在）
           mkdir -p gradle/wrapper
-          
-          # 从 Maven Central 或其他 CDN 下载标准 gradle-wrapper.jar 文件
-          # 警告：这里假设项目的 gradle-wrapper.properties 文件中指定的版本是兼容的
+          # 注意：这里下载的是 Gradle v8.8 的 wrapper JAR，它包含了缺失的 main 类
           curl -L "https://repo1.maven.org/maven2/org/gradle/gradle-wrapper/8.8/gradle-wrapper-8.8.jar" -o "$JAR_PATH"
           echo "Download complete."
         else
@@ -49,21 +42,27 @@ jobs:
       with:
         java-version: '17'
         distribution: 'temurin'
-        cache: 'gradle' 
+        cache: 'gradle' # 启用缓存加速
         
-    # 步骤 4: 赋予 Gradle 包装器执行权限
+    # 步骤 4: 赋予 Gradle 包装器执行权限 (保持，以防仍使用 gradlew)
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
       
-    # 步骤 5: 构建 Release AAB 和 APK
-    - name: Build Release AAB and APK
-      run: ./gradlew assembleRelease bundleRelease --stacktrace
+    # 步骤 5: 使用 Java 命令直接运行 Gradle Wrapper 进行构建 (核心修复)
+    - name: Directly Run Gradle Wrapper for Build
+      run: |
+        # 要执行的 Gradle 任务：构建 Release APK 和 AAB
+        GRADLE_TASKS="assembleRelease bundleRelease --stacktrace"
+        
+        # 使用 Java 命令，明确指定类路径 (Class Path) 来运行主类
+        java -cp "gradle/wrapper/gradle-wrapper.jar" org.gradle.wrapper.GradleWrapperMain ${GRADLE_TASKS}
       
     # 步骤 6: 上传构建产物
     - name: Upload Release Artifacts
       uses: actions/upload-artifact@v4
       with:
         name: nthlink-android-release-build
+        # 假设主应用模块名为 'app'
         path: |
           app/build/outputs/apk/release/*.apk
           app/build/outputs/bundle/release/*.aab
