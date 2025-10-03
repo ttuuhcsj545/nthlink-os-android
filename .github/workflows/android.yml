@@ -1,59 +1,58 @@
 # 工作流名称
-name: Android CI Build
+name: Android Release CI with Submodules
 
-# 触发工作流的事件：
-# 1. 每次推送到 main 分支时
-# 2. 允许手动在 GitHub Actions 页面触发
+# 触发条件：
+# - 每次推送到 'main' 分支
+# - 允许手动触发
 on:
   push:
-    branches: [ "main", "develop" ]
-  pull_request:
     branches: [ "main" ]
   workflow_dispatch:
 
-# 定义一个名为 "build" 的任务 (Job)
+# 定义一个名为 "build_release" 的任务
 jobs:
-  build:
-    # 任务将在最新的 Ubuntu 虚拟机上运行
+  build_release:
+    # 运行环境：最新的 Ubuntu 虚拟机
     runs-on: ubuntu-latest
-
-    # 任务包含的步骤
-    steps:
     
-    # 步骤 1: 检出代码
-    # 使用 actions/checkout@v4 确保工作流可以访问仓库代码
-    - name: Checkout Repository
-      uses: actions/checkout@v4
+    # 步骤
+    steps:
       
+    # 步骤 1: 检出代码 (关键：带子模块递归检出)
+    # 使用 actions/checkout@v4 来检出仓库代码，并递归初始化和更新所有子模块。
+    - name: Checkout Repository and Submodules
+      uses: actions/checkout@v4
+      with:
+        submodules: true # 启用子模块支持
+        fetch-depth: 0 # 检出完整历史记录，用于子模块
+        
     # 步骤 2: 设置 Java 环境
-    # Android 开发通常需要 JDK 17 或更新版本
+    # Android Gradle Plugin 需要 JDK 17
     - name: Set up JDK 17
       uses: actions/setup-java@v4
       with:
         java-version: '17'
         distribution: 'temurin'
-        cache: 'gradle' # 缓存 Gradle 依赖，加快后续构建速度
+        cache: 'gradle' # 启用 Gradle 缓存，加速构建
         
     # 步骤 3: 赋予 Gradle 包装器执行权限
-    # 在 Linux 环境中运行 ./gradlew 前必须执行
+    # 确保 gradlew 脚本可以在 Linux 环境中执行
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
       
-    # 步骤 4: 构建 Debug APK 和 AAB
-    # 根据您的项目模块名调整 :app
-    - name: Build Debug APK and AAB
-      run: |
-        ./gradlew assembleDebug
-        ./gradlew bundleDebug
-        
-    # 步骤 5: 上传构建产物 (Artifact)
-    # 将生成的 APK/AAB 文件作为产物上传到 GitHub Actions，方便下载
-    - name: Upload Debug Artifacts
+    # 步骤 4: 构建 Release AAB 和 APK
+    # 使用 release 构建任务。注意：这需要您在本地配置好签名信息
+    - name: Build Release AAB and APK
+      # 使用 --stacktrace 可以在构建失败时打印详细的堆栈信息
+      run: ./gradlew assembleRelease bundleRelease --stacktrace
+      
+    # 步骤 5: 上传构建产物 (Release APK 和 AAB)
+    - name: Upload Release Artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: debug-build-outputs
+        name: nthlink-android-release-build
+        # 注意：这里假设您的主应用模块名为 'app'，请根据项目实际情况检查路径
         path: |
-          app/build/outputs/apk/debug/app-debug.apk
-          app/build/outputs/bundle/debug/app-debug.aab
-        # 保留 5 天
-        retention-days: 5
+          app/build/outputs/apk/release/*.apk
+          app/build/outputs/bundle/release/*.aab
+        retention-days: 7 # 产物保留 7 天
