@@ -52,7 +52,7 @@ jobs:
     - name: Directly Run Gradle Wrapper for Build
       run: |
         # 要执行的 Gradle 任务：构建 Release APK 和 AAB
-        GRADLE_TASKS="assembleRelease bundleRelease --stacktrace"
+        GRADLE_TASKS="assembleDebug bundleDebug --stacktrace"
         
         # 使用 Java 命令，明确指定类路径 (Class Path) 来运行主类
         java -cp "gradle/wrapper/gradle-wrapper.jar" org.gradle.wrapper.GradleWrapperMain ${GRADLE_TASKS}
