@@ -1,9 +1,7 @@
 # 工作流名称
-name: Android Release CI with Submodules
+name: Android Release CI with Manual Gradle Fix
 
-# 触发条件：
-# - 每次推送到 'main' 分支
-# - 允许手动触发
+# 触发条件
 on:
   push:
     branches: [ "main" ]
@@ -12,47 +10,61 @@ on:
 # 定义一个名为 "build_release" 的任务
 jobs:
   build_release:
-    # 运行环境：最新的 Ubuntu 虚拟机
     runs-on: ubuntu-latest
     
-    # 步骤
     steps:
       
-    # 步骤 1: 检出代码 (关键：带子模块递归检出)
-    # 使用 actions/checkout@v4 来检出仓库代码，并递归初始化和更新所有子模块。
+    # 步骤 1: 检出代码 (必须包含子模块)
     - name: Checkout Repository and Submodules
       uses: actions/checkout@v4
       with:
         submodules: true # 启用子模块支持
-        fetch-depth: 0 # 检出完整历史记录，用于子模块
+        fetch-depth: 0 
         
-    # 步骤 2: 设置 Java 环境
-    # Android Gradle Plugin 需要 JDK 17
+    # 步骤 2: 手动修复 Gradle Wrapper JAR 缺失问题
+    # 如果原作者项目没有包含 gradle/wrapper/gradle-wrapper.jar，这个步骤会手动下载它。
+    - name: Manually fetch missing gradle-wrapper.jar
+      run: |
+        # 目标路径
+        JAR_PATH="gradle/wrapper/gradle-wrapper.jar"
+        
+        # 检查文件是否已存在（如果存在则跳过）
+        if [ ! -f "$JAR_PATH" ]; then
+          echo "gradle-wrapper.jar not found. Downloading standard v8.8..."
+          
+          # 创建目录（如果不存在）
+          mkdir -p gradle/wrapper
+          
+          # 从 Maven Central 或其他 CDN 下载标准 gradle-wrapper.jar 文件
+          # 警告：这里假设项目的 gradle-wrapper.properties 文件中指定的版本是兼容的
+          curl -L "https://repo1.maven.org/maven2/org/gradle/gradle-wrapper/8.8/gradle-wrapper-8.8.jar" -o "$JAR_PATH"
+          echo "Download complete."
+        else
+          echo "gradle-wrapper.jar already exists. Skipping download."
+        fi
+
+    # 步骤 3: 设置 Java 环境
     - name: Set up JDK 17
       uses: actions/setup-java@v4
       with:
         java-version: '17'
         distribution: 'temurin'
-        cache: 'gradle' # 启用 Gradle 缓存，加速构建
+        cache: 'gradle' 
         
-    # 步骤 3: 赋予 Gradle 包装器执行权限
-    # 确保 gradlew 脚本可以在 Linux 环境中执行
+    # 步骤 4: 赋予 Gradle 包装器执行权限
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
       
-    # 步骤 4: 构建 Release AAB 和 APK
-    # 使用 release 构建任务。注意：这需要您在本地配置好签名信息
+    # 步骤 5: 构建 Release AAB 和 APK
     - name: Build Release AAB and APK
-      # 使用 --stacktrace 可以在构建失败时打印详细的堆栈信息
       run: ./gradlew assembleRelease bundleRelease --stacktrace
       
-    # 步骤 5: 上传构建产物 (Release APK 和 AAB)
+    # 步骤 6: 上传构建产物
     - name: Upload Release Artifacts
       uses: actions/upload-artifact@v4
       with:
         name: nthlink-android-release-build
-        # 注意：这里假设您的主应用模块名为 'app'，请根据项目实际情况检查路径
         path: |
           app/build/outputs/apk/release/*.apk
           app/build/outputs/bundle/release/*.aab
-        retention-days: 7 # 产物保留 7 天
+        retention-days: 7
